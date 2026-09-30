@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+ <title>清风村 · 山河初醒</title>
+ <link rel="stylesheet" href="style.css">
+</head>
+<body>
+ <main>
+  <header><div><small>山河初醒 · 可玩原型 07</small><h1>清风村 <span id="place">春日漫游</span></h1></div><button id="bag">行囊</button></header>
+  <section class="status"><span id="date"></span><button id="speed">时间 ×1</button><button id="wait">歇息一时辰</button></section>
+  <div class="stage">
+   <canvas id="game" width="720" height="960" aria-label="点击地图目的地自动行走，走近人物或地点后点击互动"></canvas>
+   <div class="vignette"></div>
+   <div id="toast">点击目的地，自在走走。</div>
+   <div id="dialogue" role="dialog" aria-label="人物对话" hidden>
+    <div class="dialogue-card">
+     <div class="dialogue-turn">
+      <span class="dialogue-speaker"><canvas id="dialogue-portrait" width="116" height="128" aria-hidden="true"></canvas><span id="dialogue-name"></span></span>
+      <span class="dialogue-bubble">
+       <button id="dialogue-next" class="dialogue-copy" type="button" aria-labelledby="dialogue-name dialogue-text dialogue-hint"><span id="dialogue-text" aria-live="polite"></span><span class="dialogue-cue"><span id="dialogue-hint">点击继续</span><span aria-hidden="true">▼</span></span></button>
+       <span id="dialogue-actions" aria-label="可选操作"></span>
+      </span>
+     </div>
+     <button id="dialogue-close" type="button" aria-label="结束对话">×</button>
+    </div>
+   </div>
+   <div id="modal" hidden><div class="sheet"><small id="eyebrow">清风村 · 日常</small><h2 id="title"></h2><p id="body"></p><div id="actions"></div><button id="close">暂且放下</button></div></div>
+  </div>
+  <footer><p id="walk-status" aria-live="polite">点击道路或空地，自动走过去。</p><button id="stop" hidden>停下</button></footer>
+  <div id="near-actions" aria-label="附近可点击的交互"></div>
+  <p class="hint">点击地图自动寻路 · 点击新位置改道<br>走近后点击人物、门口、田地或码头 · 也可点击上方附近对象</p>
+ </main>
+ <script src="data.js?v=7"></script><script src="engine.js?v=7"></script><script src="navigation.js?v=7"></script><script src="game.js?v=7"></script>
+</body>
+</html>
