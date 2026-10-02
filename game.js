@@ -258,7 +258,7 @@ function interactionTargets(){
  else {
   const room=DATA.interiors[scene];
   if(room){
-   if(room.exitVillage)list.push({x:360,y:805,type:'exit',label:'回到村中',hitRects:[{x:290,y:770,w:140,h:150}]});
+   if(room.exitVillage){const e=room.exit||{x:360,y:805,hit:{x:290,y:770,w:140,h:150}};list.push({x:e.x,y:e.y,type:'exit',label:'回到村中',reach:e.reach||58,hitRects:[e.hit]});}
    if(room.service){const p=room.service;list.push({x:p.x,y:p.y,type:'service',label:{home:'药柜、旧医书与床铺',school:'读书与上课',tavern:'茶酒与鲜货'}[scene],reach:p.reach||150,hitRects:[room.serviceHit||{x:145,y:255,w:430,h:135}]});}
    for(const t of room.transitions||[])list.push({x:t.x,y:t.y,type:'transition',id:t.id,label:t.label,reach:t.reach||70,hitRects:[t.hit],to:t.to,spawn:t.spawn});
    for(const item of room.inspects||[])list.push({x:item.x,y:item.y,type:'inspect',id:item.id,label:item.label,reach:item.reach||80,hitRects:[item.hit],title:item.title,body:item.body});
