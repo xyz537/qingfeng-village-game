@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d');
-const art={map:new Image(),sprites:new Image(),walkers:new Image(),walkExtra:new Image(),directions:Array.from({length:9},(_,index)=>{const image=new Image();image.src=`assets/directional-${index}-v2.png`;return image;})};art.map.src='assets/village-map.png';art.sprites.src='assets/villagers-atlas.png';art.walkers.src='assets/villagers-walk.png';art.walkExtra.src='assets/villagers-walk-extra.png';
+const art={map:new Image(),sprites:new Image(),walkers:new Image(),walkExtra:new Image(),bandit:new Image(),directions:Array.from({length:9},(_,index)=>{const image=new Image();image.src=`assets/directional-${index}-v2.png`;return image;})};art.map.src='assets/village-map.png';art.sprites.src='assets/villagers-atlas.png';art.walkers.src='assets/villagers-walk.png';art.walkExtra.src='assets/villagers-walk-extra.png';art.bandit.src='assets/bandit.png';
 for(const [id,room] of Object.entries(DATA.interiors)){art[id]=new Image();art[id].src=room.asset;}
 let state=Core.fresh();try{const s=JSON.parse(localStorage.getItem('qingfeng-v1'));if([1,2].includes(s?.version)&&Array.isArray(s.plots)&&Number.isFinite(s.time)){state={...state,...s};if(s.version===1){state.version=2;state.speed=1;}}}catch{}
 if(state.scene==='village'&&Core.solid(state.x,state.y)){state.x=DATA.map.spawn.x;state.y=DATA.map.spawn.y;}
@@ -117,6 +117,18 @@ function person(x,y,color,name,player=false,sprite=null,motion={}){
  ctx.restore();
  ctx.font='bold 11px "Microsoft YaHei",sans-serif';const tw=ctx.measureText(name).width+13;
  rect(x-tw/2,y+10,tw,19,player?'#293e2dcf':'#263624b8');text(name,x,y+24,11,'#f7ebcc');
+}
+function drawBandit(x,y,fighter=null){
+ const kind=fighter?.action?.kind||'idle',facing=fighter?.facing||'left';
+ const poses={idle:{dy:0,angle:0,scale:1},approach:{dy:-2,angle:-.04,scale:1},windup:{dy:-4,angle:-.22,scale:1.03},hurt:{dy:1,angle:.18,scale:.96},down:{dy:18,angle:-Math.PI/2,scale:.92}};
+ const pose=poses[kind]||poses.idle;
+ ellipse(x,y+4,kind==='down'?25:15,kind==='down'?6:4,'#17231f77');
+ ctx.save();ctx.translate(x,y+pose.dy);ctx.rotate(pose.angle);ctx.scale((facing==='right'?-1:1)*pose.scale,pose.scale);
+ if(kind==='hurt')ctx.globalAlpha=.62;
+ if(art.bandit.complete&&art.bandit.naturalWidth)ctx.drawImage(art.bandit,-50,-96,100,100);
+ else{ellipse(0,-55,11,11,'#b98a63');rect(-15,-44,30,42,'#69513b');}
+ ctx.restore();
+ if(fighter&&kind!=='down'){ctx.font='bold 11px "Microsoft YaHei",sans-serif';const tw=ctx.measureText(fighter.name||'山贼').width+13;rect(x-tw/2,y+10,tw,19,'#4b2823dc');text(fighter.name||'山贼',x,y+24,11,'#f7e3c4');}
 }
 function building(b){rect(b.x+8,b.y+10,b.w,b.h,'#36534125');rect(b.x,b.y+22,b.w,b.h-22,'#d2c6a1');rect(b.x-9,b.y,b.w+18,37,b.color);for(let j=0;j<5;j++)rect(b.x-8,b.y+j*7,b.w+16,2,'#d7debd30');rect(b.x+14,b.y+53,29,25,'#66756b');rect(b.x+b.w-45,b.y+53,29,25,'#66756b');rect(b.x+b.w/2-16,b.y+b.h-42,32,42,'#625e45');rect(b.x+b.w/2-42,b.y+35,84,24,'#f0dfb6');text(b.name,b.x+b.w/2,b.y+52,14);rect(b.x+b.w/2-22,b.y+b.h,44,11,'#b9ae89')}
 function drawVillage(){

@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 
 const noop=()=>{};
 const drawCalls=[],canvasOps=[];
-const context=new Proxy({drawImage:(...args)=>drawCalls.push(args),lineTo:(...args)=>canvasOps.push(['lineTo',...args]),moveTo:(...args)=>canvasOps.push(['moveTo',...args]),ellipse:(...args)=>canvasOps.push(['ellipse',...args]),measureText:value=>({width:String(value).length*13})},{get:(target,key)=>key in target?target[key]:noop});
+const context=new Proxy({drawImage:(...args)=>drawCalls.push(args),lineTo:(...args)=>canvasOps.push(['lineTo',...args]),moveTo:(...args)=>canvasOps.push(['moveTo',...args]),ellipse:(...args)=>canvasOps.push(['ellipse',...args]),translate:(...args)=>canvasOps.push(['translate',...args]),rotate:(...args)=>canvasOps.push(['rotate',...args]),scale:(...args)=>canvasOps.push(['scale',...args]),save:()=>canvasOps.push(['save']),restore:()=>canvasOps.push(['restore']),measureText:value=>({width:String(value).length*13})},{get:(target,key)=>key in target?target[key]:noop});
 const elements={};
 const windowListeners={};
 const el=()=>({
@@ -35,6 +35,7 @@ const mapImage=vm.runInContext('art.map',box);
 const spriteImage=vm.runInContext('art.sprites',box);
 const walkImage=vm.runInContext('art.walkers',box);
 const walkExtraImage=vm.runInContext('art.walkExtra',box);
+const banditImage=vm.runInContext('art.bandit',box);
 const directionalImages=vm.runInContext('art.directions',box);
 const interiorImages=Object.fromEntries(Object.keys(DATA.interiors).map(id=>[id,vm.runInContext(`art.${id}`,box)]));
 const run=script=>vm.runInContext(script,box);
@@ -136,6 +137,8 @@ assert(fs.existsSync(path.join(__dirname,mapImage.src)),'village map asset is mi
 assert(fs.existsSync(path.join(__dirname,spriteImage.src)),'villager sprite asset is missing');
 assert(fs.existsSync(path.join(__dirname,walkImage.src)),'walking sprite atlas is missing');
 assert(fs.existsSync(path.join(__dirname,walkExtraImage.src)),'supplemental walking sprite atlas is missing');
+assert.equal(banditImage.src,'assets/bandit.png');
+assert(fs.existsSync(path.join(__dirname,banditImage.src)),'bandit character asset is missing');
 for(const [index,image] of directionalImages.entries())assert(fs.existsSync(path.join(__dirname,image.src)),`directional sprite ${index} is missing`);
 for(const [id,image] of Object.entries(interiorImages))assert(fs.existsSync(path.join(__dirname,image.src)),id+' interior asset is missing');
 run('tick(100);tick(200)');
@@ -146,6 +149,14 @@ assert(drawCalls.some(args=>args[0]===directionalImages[0]&&args[2]===directiona
 assert(drawCalls.some(args=>args[0]===directionalImages[3]&&args[2]===directionalImages[3].naturalHeight/2),'NPC left-facing row was not drawn');
 assert.equal(run("directionFromDelta(0,-4,'down')"),'up');
 assert.equal(run("directionFromDelta(3,0,'down')"),'right');
+const banditPoses={};
+for(const kind of ['idle','approach','windup','hurt','down']){
+ const start=canvasOps.length;
+ run(`drawBandit(360,500,{action:{kind:'${kind}'},facing:'left'})`);
+ assert(drawCalls.some(args=>args[0]===banditImage),kind+' must draw the bandit image');
+ banditPoses[kind]=JSON.stringify(canvasOps.slice(start));
+}
+assert.equal(new Set(Object.values(banditPoses)).size,5,'bandit combat states need distinct poses');
 assert.equal(DATA.gameMinutesPerRealSecond,1,'24 real minutes must equal one game day');
 run('state=Core.fresh();last=1000;tick(1441000)');
 check('state.time===Core.fresh().time+1440');
