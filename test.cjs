@@ -365,9 +365,10 @@ check("modal && dialogue && document.getElementById('dialogue-name').textContent
 assert.deepEqual(elements['dialogue-actions'].children.map(button=>button.textContent),['拔剑迎战','暂且退开']);
 elements['dialogue-actions'].children[1].onclick();
 check("state.scene==='road' && !modal && dialogue===null");
-run('banditEncounter()');
+run("banditEncounter();toastUntil=9999;document.getElementById('walk-status').textContent='旧提示'");
 elements['dialogue-actions'].children[0].onclick();
 check("state.scene==='battle' && battle?.status==='running'");
+check("toastUntil===0 && document.getElementById('walk-status').textContent==='战斗自动进行中，双方会自行判断攻防。'");
 check("battle.fighters.player.hp===100 && battle.fighters.bandit.hp===120");
 assert.equal(elements['combat-hud'].hidden,false,'battle HUD should be visible');
 run('renderNearby()');
@@ -378,6 +379,7 @@ check("battle!==battleBeforeRestart && battle.fighters.player.hp===100 && battle
 run('last=1000;tick(6000)');check('battle.time<=.11');
 elements['combat-return'].onclick();
 check("state.scene==='road' && battle===null && document.getElementById('combat-hud').hidden");
+check("document.getElementById('walk-status').textContent.includes('古道')");
 run('clickMap({x:360,y:890})');finishWalking();run('clickMap({x:360,y:890})');check("state.scene==='village'");
 
 for(const crop of ['青菜','玉米','花生','豌豆']){

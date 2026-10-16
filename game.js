@@ -84,10 +84,10 @@ function banditEncounter(){
  ],80);
 }
 function startBattle(){
- cancelTravel();close();state.scene='battle';state.x=190;state.y=650;battle=Combat.createBattle();near=null;nearSignature='';$('near-actions').replaceChildren();$('combat-hud').hidden=false;$('combat-result').hidden=true;renderCombatHud();
+ cancelTravel('战斗自动进行中，双方会自行判断攻防。');close();toastUntil=0;$('toast').style.opacity=0;state.scene='battle';state.x=190;state.y=650;battle=Combat.createBattle();near=null;nearSignature='';$('near-actions').replaceChildren();$('combat-hud').hidden=false;$('combat-result').hidden=true;renderCombatHud();
 }
 function leaveBattle(){
- battle=null;state.scene='road';state.x=360;state.y=760;near=null;nearSignature='';$('combat-hud').hidden=true;$('combat-result').hidden=true;close();tell('你回到古道上，山贼仍在前方。');save();
+ battle=null;state.scene='road';state.x=360;state.y=760;near=null;nearSignature='';$('combat-hud').hidden=true;$('combat-result').hidden=true;close();cancelTravel('已回到古道，可再次走近山贼挑战。');tell('你回到古道上，山贼仍在前方。');save();
 }
 function interact(target=near){
  if(modal||!target)return;
