@@ -4,7 +4,7 @@ const Combat=(()=>{
   bandit:{id:'bandit',name:'山贼',side:'enemy',hp:120,maxHp:120,innerPower:0,maxInnerPower:0,attack:25,defense:8,attackRange:76,attackInterval:1.65,windup:.52,moveSpeed:88,aiLevel:0,weapon:'柴刀',technique:'挥刀',allowed:{attack:true,parry:false,dodge:false,guard:false},x:530,y:650,facing:'left'}
  };
  function fighter(source,overrides={}){
-  return {...source,...overrides,allowed:{...source.allowed,...overrides.allowed},action:{kind:'idle',remaining:0,resolved:false},cooldown:0,guardRemaining:0,attacks:0,decision:'观察对手',decisionReason:'等待战机',escaping:false};
+  return {...source,...overrides,allowed:{...source.allowed,...overrides.allowed},action:{kind:'idle',remaining:0,resolved:false},cooldown:0,guardRemaining:0,attacks:0,decision:'观察对手',decisionReason:'等待战机',escaping:false,fleeChecked:false};
  }
  function createBattle(overrides={}){
   return {time:0,status:'running',fighters:{player:fighter(templates.player,overrides.player),bandit:fighter(templates.bandit,overrides.bandit)},log:[],result:null,maxStep:0};
@@ -87,7 +87,10 @@ const Combat=(()=>{
   if(battle.status!=='running'||['windup','parry','dodge','guard','hurt','down'].includes(fighter.action.kind))return;
   const opponent=opponentOf(battle,fighter);
   if(fighter.escaping){move(fighter,opponent,dt,true);setAction(fighter,'flee',Infinity,'逃跑','气血过低，只想保命');if(fighter.x<=40||fighter.x>=680)finish(battle,fighter.id==='bandit'?'bandit_fled':'player_fled',`${fighter.name}逃离了战场。`);return;}
-  if(fighter.aiLevel===0&&fighter.hp/fighter.maxHp<.2&&random()<.35){fighter.escaping=true;setAction(fighter,'flee',Infinity,'逃跑','气血低于两成');addLog(battle,`${fighter.name}胆怯后退，想要逃跑。`,'flee');return;}
+  if(fighter.aiLevel===0&&fighter.hp/fighter.maxHp<.2&&!fighter.fleeChecked){
+   fighter.fleeChecked=true;
+   if(random()<.35){fighter.escaping=true;setAction(fighter,'flee',Infinity,'逃跑','气血低于两成');addLog(battle,`${fighter.name}胆怯后退，想要逃跑。`,'flee');return;}
+  }
   if(defend(fighter,opponent,battle))return;
   if(distance(fighter,opponent)>fighter.attackRange){setAction(fighter,'approach',Infinity,'接近','目标在攻击范围外');move(fighter,opponent,dt);return;}
   if(fighter.cooldown<=0&&fighter.allowed.attack){beginAttack(fighter,battle);return;}

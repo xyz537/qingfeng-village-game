@@ -70,6 +70,11 @@ const fleeingBattle=Combat.createBattle({bandit:{hp:20,x:530}});
 advanceFight(fleeingBattle,.05,()=>0);
 assert.equal(fleeingBattle.fighters.bandit.action.kind,'flee','low-health AI0 should be able to flee');
 
+const resoluteBattle=Combat.createBattle({player:{x:300,allowed:{attack:false}},bandit:{hp:20,x:365}});
+advanceFight(resoluteBattle,.05,()=>.99);
+advanceFight(resoluteBattle,2,()=>0);
+assert.equal(resoluteBattle.fighters.bandit.escaping,false,'an AI0 fighter should roll the low-health flee chance only once');
+
 const reactingBattle=Combat.createBattle({player:{hp:40,x:300},bandit:{x:365}});
 reactingBattle.fighters.bandit.action={kind:'windup',remaining:.4,resolved:false};
 advanceFight(reactingBattle,.05,()=>.2);

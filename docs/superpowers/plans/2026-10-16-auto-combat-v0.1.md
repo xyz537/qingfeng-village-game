@@ -264,4 +264,3 @@ Expected: both syntax checks exit 0, test prints PASS, diff check is clean, and 
 git add README.md VALIDATION.md
 git commit -m "docs: explain and verify road combat"
 ```
-
