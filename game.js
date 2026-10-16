@@ -112,7 +112,7 @@ function person(x,y,color,name,player=false,sprite=null,motion={}){
  const height=player?51:46,width=height*.8,moving=!!motion.moving,phase=motion.phase||0,direction=motion.facing||'down';
  ellipse(x,y+2,player?13:10,4,'#162a2099');
  if(player){ctx.strokeStyle='#fff2b5';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y+2,17,7,0,0,Math.PI*2);ctx.stroke();}
- ctx.save();ctx.translate(x,y);
+ ctx.save();ctx.translate(x,y+(motion.offsetY||0));ctx.rotate(motion.lean||0);
  const directional=art.directions[index];
  if(directional?.complete&&directional.naturalWidth){
   const directionRow={down:0,up:1,left:2,right:3}[direction]??0,fw=directional.naturalWidth/2,fh=directional.naturalHeight/4;
@@ -130,20 +130,31 @@ function person(x,y,color,name,player=false,sprite=null,motion={}){
  else if(art.sprites.complete&&art.sprites.naturalWidth)ctx.drawImage(art.sprites,col*sw,row*sh,sw,sh,-width/2,-height+5,width,height);
  else {ellipse(0,-12,9,10,'#d9bd95');rect(-9,-4,18,23,color);}
  ctx.restore();
- ctx.font='bold 11px "Microsoft YaHei",sans-serif';const tw=ctx.measureText(name).width+13;
- rect(x-tw/2,y+10,tw,19,player?'#293e2dcf':'#263624b8');text(name,x,y+24,11,'#f7ebcc');
+ if(!motion.hideLabel){ctx.font='bold 11px "Microsoft YaHei",sans-serif';const tw=ctx.measureText(name).width+13;
+ rect(x-tw/2,y+10,tw,19,player?'#293e2dcf':'#263624b8');text(name,x,y+24,11,'#f7ebcc');}
 }
 function drawBandit(x,y,fighter=null){
  const kind=fighter?.action?.kind||'idle',facing=fighter?.facing||'left';
- const poses={idle:{dy:0,angle:0,scale:1},approach:{dy:-2,angle:-.04,scale:1},windup:{dy:-4,angle:-.22,scale:1.03},hurt:{dy:1,angle:.18,scale:.96},down:{dy:18,angle:-Math.PI/2,scale:.92}};
+ const attackProgress=kind==='windup'?Math.max(0,Math.min(1,1-fighter.action.remaining/(fighter.windup||.52))):0;
+ const attackAngle=attackProgress<.42?-.36+attackProgress*.28:-.24+(attackProgress-.42)*1.22;
+ const fleeBob=kind==='flee'?Math.sin((fighter.animationTime||0)*18)*2:0;
+ const poses={idle:{dy:0,angle:0,scale:1},approach:{dy:-2,angle:-.04,scale:1},windup:{dy:-4,angle:attackAngle,scale:1.04},hurt:{dy:1,angle:.18,scale:.96},flee:{dy:fleeBob,angle:-.18,scale:.98},down:{dy:18,angle:-Math.PI/2,scale:.92}};
  const pose=poses[kind]||poses.idle;
  ellipse(x,y+4,kind==='down'?25:15,kind==='down'?6:4,'#17231f77');
  ctx.save();ctx.translate(x,y+pose.dy);ctx.rotate(pose.angle);ctx.scale((facing==='right'?-1:1)*pose.scale,pose.scale);
  if(kind==='hurt')ctx.globalAlpha=.62;
- if(art.bandit.complete&&art.bandit.naturalWidth)ctx.drawImage(art.bandit,-50,-96,100,100);
+ if(art.bandit.complete&&art.bandit.naturalWidth)ctx.drawImage(art.bandit,-34,-71,68,74);
  else{ellipse(0,-55,11,11,'#b98a63');rect(-15,-44,30,42,'#69513b');}
+ if(kind==='windup'&&attackProgress>.42){ctx.strokeStyle='#f5df9dcc';ctx.lineWidth=6;ctx.lineCap='round';ctx.beginPath();ctx.arc(4,-34,45,-2.05,-.28);ctx.stroke();ctx.strokeStyle='#fff7d7';ctx.lineWidth=2;ctx.beginPath();ctx.arc(4,-34,45,-2.05,-.28);ctx.stroke();}
  ctx.restore();
  if(fighter&&kind!=='down'){ctx.font='bold 11px "Microsoft YaHei",sans-serif';const tw=ctx.measureText(fighter.name||'山贼').width+13;rect(x-tw/2,y+10,tw,19,'#4b2823dc');text(fighter.name||'山贼',x,y+24,11,'#f7e3c4');}
+}
+function actionCue(label,x,y,color){
+ ellipse(x,y,18,18,'#17211ddd');ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y,18,18,0,0,Math.PI*2);ctx.stroke();text(label,x,y+7,22,color);
+}
+function drawParrySword(player){
+ ctx.save();ctx.strokeStyle='#f7efcf';ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(player.x-29,player.y-38);ctx.lineTo(player.x+30,player.y-38);ctx.stroke();ctx.strokeStyle='#9f7745';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(player.x+4,player.y-45);ctx.lineTo(player.x+4,player.y-30);ctx.stroke();ctx.restore();
+ ellipse(player.x+31,player.y-38,6,6,'#fff3a8aa');
 }
 function building(b){rect(b.x+8,b.y+10,b.w,b.h,'#36534125');rect(b.x,b.y+22,b.w,b.h-22,'#d2c6a1');rect(b.x-9,b.y,b.w+18,37,b.color);for(let j=0;j<5;j++)rect(b.x-8,b.y+j*7,b.w+16,2,'#d7debd30');rect(b.x+14,b.y+53,29,25,'#66756b');rect(b.x+b.w-45,b.y+53,29,25,'#66756b');rect(b.x+b.w/2-16,b.y+b.h-42,32,42,'#625e45');rect(b.x+b.w/2-42,b.y+35,84,24,'#f0dfb6');text(b.name,b.x+b.w/2,b.y+52,14);rect(b.x+b.w/2-22,b.y+b.h,44,11,'#b9ae89')}
 function drawVillage(){
@@ -172,10 +183,13 @@ function drawBattle(){
  ellipse(360,700,270,72,'#665b4438');text('古道 · 荒野交锋',360,205,26,'#eee6c9');text('双方自动判断距离与攻防',360,242,14,'#d5d3b8');
  if(!battle)return;const player=battle.fighters.player,banditFighter=battle.fighters.bandit;
  if(player.guardRemaining>0){ctx.strokeStyle='#7fd3db';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(player.x,player.y-32,42,58,0,0,Math.PI*2);ctx.stroke();}
- if(player.action.kind==='parry')text('招架',player.x,player.y-105,16,'#fff2a8');
- if(player.action.kind==='dodge')text('闪避',player.x,player.y-105,16,'#b9eddd');
- person(player.x,player.y,'#f0e6c8',player.name,true,0,{moving:player.action.kind==='approach',phase:battle.time*10,facing:player.x<banditFighter.x?'right':'left'});
- drawBandit(banditFighter.x,banditFighter.y,{...banditFighter,facing:banditFighter.x>player.x?'left':'right'});
+ const playerFacing=player.x<banditFighter.x?'right':'left',playerKind=player.action.kind;
+ if(playerKind==='dodge'){ctx.save();ctx.globalAlpha=.2;person(player.x+(playerFacing==='right'?-24:24),player.y,'#f0e6c8',player.name,true,0,{facing:playerFacing,lean:playerFacing==='right'?.18:-.18,hideLabel:true});ctx.restore();}
+ person(player.x,player.y,'#f0e6c8',player.name,true,0,{moving:playerKind==='approach',phase:battle.time*10,facing:playerFacing,lean:playerKind==='parry'?(playerFacing==='right'?.09:-.09):playerKind==='dodge'?(playerFacing==='right'?.2:-.2):0,offsetY:playerKind==='parry'?3:0});
+ if(playerKind==='parry'){drawParrySword(player);actionCue('挡',player.x-43,player.y-58,'#fff2a8');}
+ if(playerKind==='dodge')actionCue('闪',player.x-43,player.y-58,'#b9eddd');
+ drawBandit(banditFighter.x,banditFighter.y,{...banditFighter,facing:banditFighter.x>player.x?'left':'right',animationTime:battle.time});
+ if(banditFighter.action.kind==='flee')actionCue('逃',banditFighter.x+43,banditFighter.y-58,'#ffd19b');
 }
 function actionLabel(fighter){return {idle:'观察',approach:'接近',windup:fighter.technique,parry:'招架',dodge:'闪避',guard:'内力护体',hurt:'受击',down:'倒地',flee:'逃跑'}[fighter.action.kind]||fighter.action.kind;}
 function renderCombatHud(){

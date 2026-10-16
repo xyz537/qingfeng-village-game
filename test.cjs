@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 
 const noop=()=>{};
 const drawCalls=[],canvasOps=[];
-const context=new Proxy({drawImage:(...args)=>drawCalls.push(args),lineTo:(...args)=>canvasOps.push(['lineTo',...args]),moveTo:(...args)=>canvasOps.push(['moveTo',...args]),ellipse:(...args)=>canvasOps.push(['ellipse',...args]),translate:(...args)=>canvasOps.push(['translate',...args]),rotate:(...args)=>canvasOps.push(['rotate',...args]),scale:(...args)=>canvasOps.push(['scale',...args]),save:()=>canvasOps.push(['save']),restore:()=>canvasOps.push(['restore']),measureText:value=>({width:String(value).length*13})},{get:(target,key)=>key in target?target[key]:noop});
+const context=new Proxy({drawImage:(...args)=>drawCalls.push(args),lineTo:(...args)=>canvasOps.push(['lineTo',...args]),moveTo:(...args)=>canvasOps.push(['moveTo',...args]),arc:(...args)=>canvasOps.push(['arc',...args]),ellipse:(...args)=>canvasOps.push(['ellipse',...args]),fillText:(...args)=>canvasOps.push(['fillText',...args]),stroke:()=>canvasOps.push(['stroke']),translate:(...args)=>canvasOps.push(['translate',...args]),rotate:(...args)=>canvasOps.push(['rotate',...args]),scale:(...args)=>canvasOps.push(['scale',...args]),save:()=>canvasOps.push(['save']),restore:()=>canvasOps.push(['restore']),measureText:value=>({width:String(value).length*13})},{get:(target,key)=>key in target?target[key]:noop});
 const elements={};
 const windowListeners={};
 const el=()=>({
@@ -162,6 +162,22 @@ for(const kind of ['idle','approach','windup','hurt','down']){
  banditPoses[kind]=JSON.stringify(canvasOps.slice(start));
 }
 assert.equal(new Set(Object.values(banditPoses)).size,5,'bandit combat states need distinct poses');
+const banditDraw=drawCalls.filter(args=>args[0]===banditImage).at(-1);
+assert(banditDraw.at(-2)<=72&&banditDraw.at(-1)<=78,'bandit sprite should stay near the player character scale');
+
+run("battle=Combat.createBattle({player:{x:300},bandit:{x:365}});battle.fighters.bandit.action={kind:'windup',remaining:.12,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='arc'),'bandit slash should draw a curved blade trail');
+run("battle.fighters.player.action={kind:'parry',remaining:.3,resolved:false};battle.fighters.bandit.action={kind:'idle',remaining:0,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='fillText'&&op[1]==='挡'),'parry should show the 挡 action cue');
+assert(canvasOps.some(op=>op[0]==='lineTo'),'parry should draw a horizontal sword guard');
+run("battle.fighters.player.action={kind:'dodge',remaining:.3,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='fillText'&&op[1]==='闪'),'dodge should show the 闪 action cue');
+run("battle.fighters.player.action={kind:'idle',remaining:0,resolved:false};battle.fighters.bandit.action={kind:'flee',remaining:Infinity,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='fillText'&&op[1]==='逃'),'fleeing should show the 逃 action cue');
 assert.equal(DATA.gameMinutesPerRealSecond,1,'24 real minutes must equal one game day');
 run('state=Core.fresh();last=1000;tick(1441000)');
 check('state.time===Core.fresh().time+1440');
