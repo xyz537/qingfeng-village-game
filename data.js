@@ -6,6 +6,7 @@ const DATA={width:720,height:960,gameMinutesPerRealSecond:1,
   villageCenter:{x:321,y:578},
   fish:{x:620,y:370,reach:58},
   road:{x:326,y:918,reach:52},
+  bandit:{x:360,y:430,reach:82,hitRects:[{x:310,y:345,w:100,h:135}]},
   gate:{x:320,y:780},
   plots:[
    {x:670,y:522,w:18,h:27,interact:{x:675,y:555}},

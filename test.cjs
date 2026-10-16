@@ -357,6 +357,27 @@ run('close()');
 
 resetClickScene();run('clickMap({x:326,y:918})');finishWalking();check("state.scene==='village'");
 run('clickMap({x:326,y:918})');check("state.scene==='road'");
+assert(DATA.map.bandit,'road bandit data is missing');
+check("interactionTargets().filter(t=>t.type==='bandit').length===1");
+run('clickMap(DATA.map.bandit)');check("travel?.target?.type==='bandit' && !modal");finishWalking();
+run('clickMap(DATA.map.bandit)');
+check("modal && dialogue && document.getElementById('dialogue-name').textContent==='山贼'");
+assert.deepEqual(elements['dialogue-actions'].children.map(button=>button.textContent),['拔剑迎战','暂且退开']);
+elements['dialogue-actions'].children[1].onclick();
+check("state.scene==='road' && !modal && dialogue===null");
+run('banditEncounter()');
+elements['dialogue-actions'].children[0].onclick();
+check("state.scene==='battle' && battle?.status==='running'");
+check("battle.fighters.player.hp===100 && battle.fighters.bandit.hp===120");
+assert.equal(elements['combat-hud'].hidden,false,'battle HUD should be visible');
+run('renderNearby()');
+assert.equal(elements['near-actions'].children.length,0,'ordinary nearby actions should be hidden in battle');
+run('last=1000;tick(1100)');check('battle.time>0 && battle.time<=.11');
+run('battleBeforeRestart=battle');elements['combat-restart'].onclick();
+check("battle!==battleBeforeRestart && battle.fighters.player.hp===100 && battle.fighters.bandit.hp===120");
+run('last=1000;tick(6000)');check('battle.time<=.11');
+elements['combat-return'].onclick();
+check("state.scene==='road' && battle===null && document.getElementById('combat-hud').hidden");
 run('clickMap({x:360,y:890})');finishWalking();run('clickMap({x:360,y:890})');check("state.scene==='village'");
 
 for(const crop of ['青菜','玉米','花生','豌豆']){

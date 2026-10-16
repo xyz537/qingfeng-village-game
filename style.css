@@ -30,3 +30,17 @@
 #dialogue[data-speaker="player"] .dialogue-bubble::before{right:-7px;left:auto;border:0;border-top:2px solid #283028;border-right:2px solid #283028;background:#e3e9d5}
 #dialogue[data-speaker="player"] #dialogue-close{right:auto;left:3px}
 @media(max-width:400px){.dialogue-card{top:8px;left:8px;width:86%}.dialogue-speaker{flex-basis:50px}#dialogue-portrait{width:50px;height:58px}#dialogue-text{font-size:12px}.dialogue-bubble{min-height:84px;padding-top:9px}#dialogue[data-speaker="player"] .dialogue-card{right:8px}}
+
+#combat-hud{position:absolute;inset:8px;z-index:2;display:flex;flex-direction:column;pointer-events:none}
+#combat-hud[hidden]{display:none}
+.combat-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.combat-card{padding:9px;border:1px solid #596750;background:#17251ee6;box-shadow:0 2px 8px #10171277;color:#e9e1c9;font-size:10px}
+.combat-card.bandit{text-align:right;background:#321f1be6;border-color:#775349}
+.combat-card>div:first-child,.combat-card p{display:flex;align-items:center;justify-content:space-between;gap:5px;margin:0 0 5px}
+.combat-card strong{font-size:13px}.combat-card small{display:block;color:#c1c9ac;line-height:1.35}.combat-card.bandit small{color:#d2b6a7}
+.combat-bar{height:5px;margin:3px 0;background:#0d1512;border-radius:3px;overflow:hidden}.combat-bar i{display:block;height:100%;width:100%;transition:width .15s}.combat-bar.hp i{background:#b54f3c}.combat-bar.qi i{background:#4c91a2}.combat-card.bandit .combat-bar.qi i{background:#65716b}
+#combat-log{align-self:center;width:min(92%,390px);margin:auto 0 6px;padding:7px 11px 7px 27px;border:1px solid #6c745a;background:#18231ed9;color:#eee5cd;font-size:10px;line-height:1.5;pointer-events:none}
+#combat-log:empty{display:none}
+#combat-result{align-self:center;width:min(92%,360px);margin:auto 0;padding:16px;border:2px solid #283028;background:#eee9d8;color:#26302a;text-align:center;box-shadow:0 6px 30px #111b1677;pointer-events:auto}
+#combat-result[hidden]{display:none}#combat-result strong,#combat-result span{display:block}#combat-result strong{font:22px Georgia,serif}#combat-result span{margin:8px 0 13px;font-size:11px;line-height:1.5}#combat-result>div{display:flex;gap:8px}#combat-result button{flex:1;background:#465b46;color:#f4ecd6}
+@media(max-width:400px){#combat-hud{inset:6px}.combat-card{padding:7px;font-size:9px}.combat-card strong{font-size:11px}.combat-card>div:first-child{display:block}.combat-card.bandit>div:first-child{text-align:right}#combat-log{margin-bottom:3px;max-height:90px;overflow:hidden}}

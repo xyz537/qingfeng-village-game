@@ -2,11 +2,13 @@ const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('
 const art={map:new Image(),sprites:new Image(),walkers:new Image(),walkExtra:new Image(),bandit:new Image(),directions:Array.from({length:9},(_,index)=>{const image=new Image();image.src=`assets/directional-${index}-v2.png`;return image;})};art.map.src='assets/village-map.png';art.sprites.src='assets/villagers-atlas.png';art.walkers.src='assets/villagers-walk.png';art.walkExtra.src='assets/villagers-walk-extra.png';art.bandit.src='assets/bandit.png';
 for(const [id,room] of Object.entries(DATA.interiors)){art[id]=new Image();art[id].src=room.asset;}
 let state=Core.fresh();try{const s=JSON.parse(localStorage.getItem('qingfeng-v1'));if([1,2].includes(s?.version)&&Array.isArray(s.plots)&&Number.isFinite(s.time)){state={...state,...s};if(s.version===1){state.version=2;state.speed=1;}}}catch{}
+if(state.scene==='battle'){state.scene='road';state.x=360;state.y=760;}
 if(state.scene==='village'&&Core.solid(state.x,state.y)){state.x=DATA.map.spawn.x;state.y=DATA.map.spawn.y;}
 let modal=false,dialogue=null,near=null,toastUntil=0,last=0,saveTimer=0,fish=null,seated=false,frame=0,playerWalkPhase=0,playerFacing='down';
+let battle=null;
 let travel=null,pointerStart=null,nearSignature='';const navigationCache=new Map();
 const villagers=DATA.npcs.map((n,i)=>({...n,x:DATA.map.villageCenter.x+i*7,y:DATA.map.villageCenter.y+i*6,scene:'village',bubble:0,moving:false,movePhase:i,facing:'down'}));
-function save(){try{localStorage.setItem('qingfeng-v1',JSON.stringify(state));}catch{}}
+function save(){try{const saved=state.scene==='battle'?{...state,scene:'road',x:360,y:760}:state;localStorage.setItem('qingfeng-v1',JSON.stringify(saved));}catch{}}
 function tell(t){$('toast').textContent=t;toastUntil=performance.now()+4500;}
 function close(){modal=false;dialogue=null;$('modal').hidden=true;$('dialogue').hidden=true;}
 function dialoguePages(value,limit=48){
@@ -17,6 +19,7 @@ function dialoguePages(value,limit=48){
 function drawDialoguePortrait(turn){
  const portrait=$('dialogue-portrait'),paint=portrait.getContext('2d');
  paint.clearRect(0,0,portrait.width,portrait.height);paint.fillStyle='#394735';paint.fillRect(0,0,portrait.width,portrait.height);
+ if(turn.portrait==='bandit'&&art.bandit.complete&&art.bandit.naturalWidth){paint.drawImage(art.bandit,4,4,portrait.width-8,portrait.height-8);return;}
  if(!art.sprites.complete||!art.sprites.naturalWidth)return;
  const index=turn.sprite??0,sw=art.sprites.naturalWidth/3,sh=art.sprites.naturalHeight/3;
  paint.imageSmoothingEnabled=false;
@@ -74,6 +77,18 @@ function field(i){const p=state.plots[i];if(!p){panel('一小块田 · '+(i+1),'
 function fishing(){if(fish){const ready=state.time>=fish.due;panel('河畔垂钓',ready?'浮子沉下去了，该收杆了。':'水波轻轻荡着，鱼还未咬钩。',[['收杆',()=>{if(ready){const name=fish.bait==='蚯蚓'?'鲫鱼':'鲤鱼';Core.add(state,name);tell('钓到一尾'+name+'。');}else tell('收早了，鱼饵已经散了。');fish=null;close();}],['继续等待',close]]);return;}panel('河边 · 一竿清风','选一份饵，抛下鱼线。等待约半个游戏时辰，浮子下沉后收杆。离开河边将结束本次垂钓。',[
  ...['蚯蚓','面团'].map(bait=>[`${bait} ×${state.bag[bait]||0} · 抛竿`,()=>{state.bag[bait]--;fish={bait,due:state.time+30};close();tell('鱼线落入水中，等一等吧。');},!state.bag[bait]]),
  ['添置鱼饵 · 5文 / 各3份',()=>spend(5,()=>{Core.add(state,'蚯蚓',3);Core.add(state,'面团',3);fishing();})]]);}
+function banditEncounter(){
+ startDialogue([{speaker:'npc',name:'山贼',portrait:'bandit',text:'此路是我开。识相的留下钱袋，不识相的……便试试你那把剑。'}],[
+  ['拔剑迎战',()=>startBattle()],
+  ['暂且退开',()=>{close();tell('你退开几步，山贼仍守在古道上。');}]
+ ],80);
+}
+function startBattle(){
+ cancelTravel();close();state.scene='battle';state.x=190;state.y=650;battle=Combat.createBattle();near=null;nearSignature='';$('near-actions').replaceChildren();$('combat-hud').hidden=false;$('combat-result').hidden=true;renderCombatHud();
+}
+function leaveBattle(){
+ battle=null;state.scene='road';state.x=360;state.y=760;near=null;nearSignature='';$('combat-hud').hidden=true;$('combat-result').hidden=true;close();tell('你回到古道上，山贼仍在前方。');save();
+}
 function interact(target=near){
  if(modal||!target)return;
  if(!canInteract(target)){requestWalk(targetPoint(target),target);return;}
@@ -81,7 +96,7 @@ function interact(target=near){
  if(target.type==='door')enter(target.id);if(target.type==='exit')leave();if(target.type==='service')service(state.scene);if(target.type==='plot')field(target.id);if(target.type==='fish')fishing();
  if(target.type==='transition')switchInterior(target);if(target.type==='inspect')panel(target.title,target.body);
  if(target.type==='road'){state.scene='road';state.x=360;state.y=760;if(!state.departed){state.departed=true;state.chronicle.push(Core.date(state.time)+'，苏家少年自村口出游。');}tell('你已走出清风村。远方的江湖，留待下一版。');save();}
- if(target.type==='return')leave();if(target.type==='npc')talkTo(target.n);
+ if(target.type==='return')leave();if(target.type==='npc')talkTo(target.n);if(target.type==='bandit')banditEncounter();
 }
 function rect(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}
 function text(t,x,y,size=16,color='#324b3b'){ctx.font=`${size}px "Microsoft YaHei",sans-serif`;ctx.textAlign='center';ctx.fillStyle=color;ctx.fillText(t,x,y)}
@@ -150,7 +165,30 @@ function drawInterior(){
  if(image?.complete&&image.naturalWidth){ctx.drawImage(image,0,0,720,960);return;}
  rect(0,0,720,960,'#334c40');rect(60,105,600,745,'#c9b78c');for(let i=0;i<18;i++)rect(60,110+i*40,600,2,'#b5a17b');rect(60,105,600,65,'#867858');rect(100,122,120,37,'#90aaa0');rect(500,122,120,37,'#90aaa0');text(b.name,360,78,27,'#e8dfbe');rect(155,270,410,77,'#89704c');rect(174,283,373,10,'#b09b70');text({smith:'铁砧 · 兵器架 · 炉火',elder:'账本 · 村志'}[state.scene],360,310,21,'#f4e4bd');for(let i=0;i<3;i++){rect(155+i*155,510,90,57,'#a08a63');rect(182+i*155,580,35,20,'#8c7757');}if(state.scene==='smith'){ellipse(578,396,27,28,'#a56840');ellipse(578,393,15,19,'#dfa663')}rect(321,825,78,29,'#344d3e');text('↓ 回到村中',360,890,18,'#e8dfbe');
 }
-function drawRoad(){rect(0,0,720,960,'#8fa77e');rect(298,0,125,960,'#caba91');for(let i=0;i<17;i++){tree(90+(i%2)*460,80+i*53,1.6);}text('村 外 古 道',360,160,30);text('江湖很远，脚下这一程已是自由。',360,240,19);text('后续区域尚未展开',360,280,16);text('↓ 返回清风村',360,897,19);}
+function drawRoad(){rect(0,0,720,960,'#8fa77e');rect(298,0,125,960,'#caba91');for(let i=0;i<17;i++){tree(90+(i%2)*460,80+i*53,1.6);}text('村 外 古 道',360,160,30);text('前路有人持刀拦道',360,240,19);drawBandit(DATA.map.bandit.x,DATA.map.bandit.y);mapSign('山贼',DATA.map.bandit.x,DATA.map.bandit.y+33);text('↓ 返回清风村',360,897,19);}
+function drawBattle(){
+ rect(0,0,720,960,'#65775c');rect(0,510,720,450,'#9b8d68');
+ for(let i=0;i<12;i++){rect(i*72-20,520+(i%3)*105,90,5,'#83755455');}
+ ellipse(360,700,270,72,'#665b4438');text('古道 · 荒野交锋',360,205,26,'#eee6c9');text('双方自动判断距离与攻防',360,242,14,'#d5d3b8');
+ if(!battle)return;const player=battle.fighters.player,banditFighter=battle.fighters.bandit;
+ if(player.guardRemaining>0){ctx.strokeStyle='#7fd3db';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(player.x,player.y-32,42,58,0,0,Math.PI*2);ctx.stroke();}
+ if(player.action.kind==='parry')text('招架',player.x,player.y-105,16,'#fff2a8');
+ if(player.action.kind==='dodge')text('闪避',player.x,player.y-105,16,'#b9eddd');
+ person(player.x,player.y,'#f0e6c8',player.name,true,0,{moving:player.action.kind==='approach',phase:battle.time*10,facing:player.x<banditFighter.x?'right':'left'});
+ drawBandit(banditFighter.x,banditFighter.y,{...banditFighter,facing:banditFighter.x>player.x?'left':'right'});
+}
+function actionLabel(fighter){return {idle:'观察',approach:'接近',windup:fighter.technique,parry:'招架',dodge:'闪避',guard:'内力护体',hurt:'受击',down:'倒地',flee:'逃跑'}[fighter.action.kind]||fighter.action.kind;}
+function renderCombatHud(){
+ const hud=$('combat-hud');if(state.scene!=='battle'||!battle){hud.hidden=true;return;}hud.hidden=false;
+ for(const [id,fighter] of Object.entries(battle.fighters)){
+  $(`${id}-hp`).textContent=`HP ${fighter.hp} / ${fighter.maxHp}`;$(`${id}-qi`).textContent=`内力 ${fighter.innerPower}`;
+  $(`${id}-hp-bar`).style.width=`${Math.max(0,fighter.hp/fighter.maxHp*100)}%`;$(`${id}-qi-bar`).style.width=`${fighter.maxInnerPower?fighter.innerPower/fighter.maxInnerPower*100:0}%`;
+  $(`${id}-action`).textContent=`${actionLabel(fighter)} · ${fighter.weapon}`;$(`${id}-decision`).textContent=`${fighter.decision}：${fighter.decisionReason}`;
+ }
+ const log=$('combat-log');log.replaceChildren();for(const entry of battle.log.slice(-5).reverse()){const item=document.createElement('li');item.textContent=`${entry.time.toFixed(1)}秒 · ${entry.text}`;log.append(item);}
+ const result=$('combat-result'),finished=battle.status!=='running';result.hidden=!finished;
+ if(finished){const titles={player_win:'主角获胜',bandit_win:'山贼获胜',bandit_fled:'山贼逃跑',player_fled:'主角撤退'};$('combat-result-title').textContent=titles[battle.status]||'战斗结束';$('combat-result-summary').textContent=`耗时 ${battle.result.time.toFixed(1)} 秒 · 主角出手 ${battle.result.playerAttacks} 次 · 山贼出手 ${battle.result.banditAttacks} 次`;}
+}
 const NPC_POS={herbs:[306,342],clinic:[430,480],clinicHelp:[300,430],homeRest:[350,590],smith:[360,405],elderDesk:[360,405],school:[360,330],tavern:[360,410],center:[365,590],tree:[260,590],farm:[682,625],river:[620,370],grocer:[130,662],hunt:[170,230],schoolyard:[478,580],tavernDoor:[451,686],well:[365,615]};
 function npcAt(scene,pos,activity,line){return {scene,x:pos[0],y:pos[1],activity,line};}
 function npcAway(activity,line){return {scene:'away',x:0,y:0,activity,line};}
@@ -266,7 +304,10 @@ function interactionTargets(){
   const f=DATA.map.fish,r=DATA.map.road;
   list.push({x:f.x,y:f.y,type:'fish',label:fish?(state.time>=fish.due?'鱼咬钩了 · 收杆':'等待 / 收杆'):'河边钓鱼',reach:f.reach,hitRects:[{x:540,y:325,w:110,h:75}]},
    {x:r.x,y:r.y,type:'road',label:'沿路出村',reach:r.reach,hitRects:[{x:282,y:715,w:74,h:100},{x:280,y:850,w:100,h:96}]});
- }else if(scene==='road')list.push({x:360,y:882,type:'return',label:'返回清风村',hitRects:[{x:285,y:840,w:150,h:80}]});
+ }else if(scene==='road'){
+  const bandit=DATA.map.bandit;
+  list.push({x:bandit.x,y:bandit.y,type:'bandit',label:'与拦路山贼交涉',reach:bandit.reach,hitRects:bandit.hitRects},{x:360,y:882,type:'return',label:'返回清风村',hitRects:[{x:285,y:840,w:150,h:80}]});
+ }else if(scene==='battle')return [];
  else {
   const room=DATA.interiors[scene];
   if(room){
@@ -326,12 +367,12 @@ function advanceTravel(dt){
  if(travel&&!travel.points.length){const target=travel.target;cancelTravel(target?'已经走近，点击「'+target.label+'」即可。':'已到达。点击新的位置继续行走。');save();}
 }
 function hitTarget(point){
- const priority={npc:0,plot:1,fish:2,service:2,transition:2,inspect:2,exit:2,return:2,door:3,road:3};
+ const priority={npc:0,bandit:0,plot:1,fish:2,service:2,transition:2,inspect:2,exit:2,return:2,door:3,road:3};
  return interactionTargets().filter(t=>t.hitRects.some(r=>Core.inRect(point.x,point.y,r)))
   .sort((a,b)=>priority[a.type]-priority[b.type]||Math.hypot(point.x-a.x,point.y-a.y)-Math.hypot(point.x-b.x,point.y-b.y))[0]||null;
 }
 function clickMap(point){
- if(modal)return;
+ if(modal||state.scene==='battle')return;
  const target=hitTarget(point);
  if(target&&canInteract(target)){interact(target);return;}
  requestWalk(target?targetPoint(target):point,target);
@@ -347,7 +388,7 @@ function drawNavigation(){
  if(travel){const p=travel.goal,pulse=3+Math.sin(frame*.12)*2;ctx.save();ctx.strokeStyle='#fff0a8';ctx.fillStyle='#5a3c1daa';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(p.x,p.y+3,12+pulse,6+pulse*.35,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(p.x,p.y-14-pulse);ctx.lineTo(p.x-6,p.y-5);ctx.lineTo(p.x+6,p.y-5);ctx.closePath();ctx.fillStyle='#fff0a8';ctx.fill();ctx.restore();return;}
  for(const target of nearbyTargets()){const p=targetPoint(target);ctx.strokeStyle='#f3dd85';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(p.x,p.y+4,target.type==='plot'?10:17,6,0,0,Math.PI*2);ctx.stroke();}
 }
-function sceneLabel(scene){if(scene==='village')return '春日漫游';if(scene==='road')return '村外古道';return DATA.interiors[scene]?.label||DATA.buildings.find(b=>b.id===scene)?.name||scene;}
+function sceneLabel(scene){if(scene==='village')return '春日漫游';if(scene==='road')return '村外古道';if(scene==='battle')return '荒野交锋';return DATA.interiors[scene]?.label||DATA.buildings.find(b=>b.id===scene)?.name||scene;}
 function tick(now){
  const elapsedSeconds=last?Math.max(0,(now-last)/1000):0;
  const dt=Math.min(elapsedSeconds,.1);last=now;frame+=dt*60;
@@ -358,12 +399,15 @@ function tick(now){
   fish=null;tell('离开了水边，你把鱼线收了起来。');
  }
  updateNPC(dt);
- if(state.scene==='village')drawVillage();else if(state.scene==='road')drawRoad();else drawInterior();
- near=findNear();
- drawNavigation();
- const people=villagers.filter(n=>n.scene===state.scene).map(n=>({...n}));
- people.push({x:state.x,y:state.y,color:'#f0e6c8',name:seated?'你 · 歇坐':'你',player:true,moving:!!travel&&!modal,movePhase:playerWalkPhase,facing:playerFacing});
- people.sort((a,b)=>a.y-b.y).forEach(n=>person(n.x,n.y,n.color,n.name,n.player,n.sprite,{moving:n.moving,phase:n.movePhase,facing:n.facing}));
+ if(state.scene==='battle'){
+  if(battle)Combat.step(battle,dt);drawBattle();near=null;$('near-actions').replaceChildren();renderCombatHud();
+ }else{
+  if(state.scene==='village')drawVillage();else if(state.scene==='road')drawRoad();else drawInterior();
+  near=findNear();drawNavigation();
+  const people=villagers.filter(n=>n.scene===state.scene).map(n=>({...n}));
+  people.push({x:state.x,y:state.y,color:'#f0e6c8',name:seated?'你 · 歇坐':'你',player:true,moving:!!travel&&!modal,movePhase:playerWalkPhase,facing:playerFacing});
+  people.sort((a,b)=>a.y-b.y).forEach(n=>person(n.x,n.y,n.color,n.name,n.player,n.sprite,{moving:n.moving,phase:n.movePhase,facing:n.facing}));
+ }
  const h=state.time%1440/60,night=h<6||h>=19;
  rect(0,0,720,960,night?'#14234366':h>17?'#b3854320':'#ffffff00');
  for(const n of villagers){
@@ -372,13 +416,14 @@ function tick(now){
   const x=Math.max(w/2+5,Math.min(715-w/2,n.x));
   rect(x-w/2,n.y-61,w,28,'#f5eed8ee');text(line,x,n.y-42,13);
  }
- renderNearby();
+ if(state.scene!=='battle')renderNearby();
  $('date').textContent=Core.date(state.time)+(night?' · 夜':' · 昼');
  $('place').textContent=sceneLabel(state.scene);
  $('speed').textContent='时间 ×'+state.speed;$('toast').style.opacity=now<toastUntil?1:0;
  if(saveTimer+4000<now){save();saveTimer=now;}requestAnimationFrame(tick);
 }
 $('bag').onclick=inventory;$('close').onclick=close;
+$('combat-restart').onclick=startBattle;$('combat-return').onclick=leaveBattle;
 $('dialogue-next').onclick=advanceDialogue;$('dialogue-close').onclick=close;
 $('stop').onclick=()=>cancelTravel('已停下。点击新的位置继续行走。');
 $('speed').onclick=()=>{state.speed=state.speed===1?8:1;save();};
