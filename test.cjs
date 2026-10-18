@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 
 const noop=()=>{};
 const drawCalls=[],canvasOps=[];
-const context=new Proxy({drawImage:(...args)=>drawCalls.push(args),lineTo:(...args)=>canvasOps.push(['lineTo',...args]),moveTo:(...args)=>canvasOps.push(['moveTo',...args]),ellipse:(...args)=>canvasOps.push(['ellipse',...args]),measureText:value=>({width:String(value).length*13})},{get:(target,key)=>key in target?target[key]:noop});
+const context=new Proxy({drawImage:(...args)=>drawCalls.push(args),lineTo:(...args)=>canvasOps.push(['lineTo',...args]),moveTo:(...args)=>canvasOps.push(['moveTo',...args]),arc:(...args)=>canvasOps.push(['arc',...args]),ellipse:(...args)=>canvasOps.push(['ellipse',...args]),fillText:(...args)=>canvasOps.push(['fillText',...args]),stroke:()=>canvasOps.push(['stroke']),translate:(...args)=>canvasOps.push(['translate',...args]),rotate:(...args)=>canvasOps.push(['rotate',...args]),scale:(...args)=>canvasOps.push(['scale',...args]),save:()=>canvasOps.push(['save']),restore:()=>canvasOps.push(['restore']),measureText:value=>({width:String(value).length*13})},{get:(target,key)=>key in target?target[key]:noop});
 const elements={};
 const windowListeners={};
 const el=()=>({
@@ -24,25 +24,126 @@ const box={
  window:{addEventListener:(name,listener)=>windowListeners[name]=listener},requestAnimationFrame:noop
 };
 vm.createContext(box);
-for(const file of ['data.js','engine.js','navigation.js','game.js']){
+for(const file of ['data.js','engine.js','navigation.js','combat.js','game.js']){
  vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),box,{filename:file});
 }
 const DATA=vm.runInContext('DATA',box);
 const Core=vm.runInContext('Core',box);
 const Navigation=vm.runInContext('Navigation',box);
+const Combat=vm.runInContext('Combat',box);
 const mapImage=vm.runInContext('art.map',box);
 const spriteImage=vm.runInContext('art.sprites',box);
 const walkImage=vm.runInContext('art.walkers',box);
 const walkExtraImage=vm.runInContext('art.walkExtra',box);
+const banditImage=vm.runInContext('art.bandit',box);
 const directionalImages=vm.runInContext('art.directions',box);
 const interiorImages=Object.fromEntries(Object.keys(DATA.interiors).map(id=>[id,vm.runInContext(`art.${id}`,box)]));
 const run=script=>vm.runInContext(script,box);
 const check=expr=>assert.equal(run(expr),true,expr);
 
+const freshBattle=Combat.createBattle();
+assert.equal(freshBattle.status,'running');
+assert.equal(freshBattle.result,null);
+assert.equal(freshBattle.log.length,0);
+assert.deepEqual(
+ Object.fromEntries(['hp','maxHp','innerPower','maxInnerPower','attack','defense','attackInterval','moveSpeed','aiLevel','weapon','technique'].map(key=>[key,freshBattle.fighters.player[key]])),
+ {hp:100,maxHp:100,innerPower:50,maxInnerPower:50,attack:18,defense:10,attackInterval:.75,moveSpeed:95,aiLevel:1,weapon:'长剑',technique:'剑击'}
+);
+assert.deepEqual(
+ Object.fromEntries(['hp','maxHp','innerPower','maxInnerPower','attack','defense','attackInterval','moveSpeed','aiLevel','weapon','technique'].map(key=>[key,freshBattle.fighters.bandit[key]])),
+ {hp:120,maxHp:120,innerPower:0,maxInnerPower:0,attack:25,defense:8,attackInterval:1.65,moveSpeed:88,aiLevel:0,weapon:'柴刀',technique:'挥刀'}
+);
+assert.deepEqual({...freshBattle.fighters.player.allowed},{attack:true,parry:true,dodge:true,guard:false});
+assert.deepEqual({...freshBattle.fighters.bandit.allowed},{attack:true,parry:false,dodge:false,guard:false});
+assert(freshBattle.fighters.player.x<freshBattle.fighters.bandit.x,'fighters must begin on opposing sides');
+
+const advanceFight=(battle,seconds,random=()=>.99)=>Combat.step(battle,seconds,random);
+const ai0Battle=Combat.createBattle({player:{aiLevel:0,allowed:{parry:false,dodge:false,guard:false}}});
+const ai0Start=ai0Battle.fighters.player.x;
+advanceFight(ai0Battle,.1);
+assert(ai0Battle.fighters.player.x>ai0Start,'AI0 should approach an out-of-range target');
+advanceFight(ai0Battle,3);
+assert(ai0Battle.fighters.player.attacks>0,'AI0 should attack in range');
+assert(!ai0Battle.log.some(entry=>/招架|闪避|护体/.test(entry.text)),'AI0 must not use trained defenses');
+
+const fleeingBattle=Combat.createBattle({bandit:{hp:20,x:530}});
+advanceFight(fleeingBattle,.05,()=>0);
+assert.equal(fleeingBattle.fighters.bandit.action.kind,'flee','low-health AI0 should be able to flee');
+
+const resoluteBattle=Combat.createBattle({player:{x:300,allowed:{attack:false}},bandit:{hp:20,x:365}});
+advanceFight(resoluteBattle,.05,()=>.99);
+advanceFight(resoluteBattle,2,()=>0);
+assert.equal(resoluteBattle.fighters.bandit.escaping,false,'an AI0 fighter should roll the low-health flee chance only once');
+
+const reactingBattle=Combat.createBattle({player:{hp:40,x:300},bandit:{x:365}});
+reactingBattle.fighters.bandit.action={kind:'windup',remaining:.4,resolved:false};
+advanceFight(reactingBattle,.05,()=>.2);
+assert(['parry','dodge'].includes(reactingBattle.fighters.player.action.kind),'AI1 should react to a visible windup');
+
+const masterBattle=Combat.createBattle({player:{aiLevel:2,hp:30,allowed:{guard:true},x:300},bandit:{attack:40,x:365}});
+masterBattle.fighters.bandit.action={kind:'windup',remaining:.4,resolved:false};
+advanceFight(masterBattle,.05);
+assert.equal(masterBattle.fighters.player.innerPower,40,'AI2 guard should spend exactly 10 inner power');
+assert(masterBattle.fighters.player.guardRemaining>1.9,'AI2 guard should last about two seconds');
+advanceFight(masterBattle,.05);
+assert.equal(masterBattle.fighters.player.innerPower,40,'active guard must not spend inner power twice');
+
+const parryBattle=Combat.createBattle({player:{x:300},bandit:{x:365}});
+parryBattle.fighters.player.action={kind:'parry',remaining:.5,resolved:false};
+parryBattle.fighters.bandit.action={kind:'windup',remaining:.01,resolved:false};
+parryBattle.fighters.player.cooldown=99;
+parryBattle.fighters.bandit.cooldown=99;
+advanceFight(parryBattle,.05);
+assert.equal(parryBattle.fighters.player.hp,94,'parry should reduce a 20-point hit to about 30%');
+
+const dodgeBattle=Combat.createBattle({player:{hp:40,x:300,y:650},bandit:{x:365}});
+dodgeBattle.fighters.bandit.action={kind:'windup',remaining:.4,resolved:false};
+const dodgeY=dodgeBattle.fighters.player.y;
+advanceFight(dodgeBattle,.05,()=>.2);
+assert.equal(dodgeBattle.fighters.player.action.kind,'dodge');
+assert.notEqual(dodgeBattle.fighters.player.y,dodgeY,'dodge should cause a side or rear displacement');
+dodgeBattle.fighters.bandit.action={kind:'windup',remaining:.01,resolved:false};
+dodgeBattle.fighters.bandit.cooldown=99;
+const dodgeHp=dodgeBattle.fighters.player.hp;
+advanceFight(dodgeBattle,.05);
+assert.equal(dodgeBattle.fighters.player.hp,dodgeHp,'a dodge window should make the incoming attack miss');
+
+const guardBattle=Combat.createBattle({player:{x:300},bandit:{x:365}});
+guardBattle.fighters.player.guardRemaining=2;
+guardBattle.fighters.player.action={kind:'guard',remaining:.35,resolved:false};
+guardBattle.fighters.bandit.action={kind:'windup',remaining:.01,resolved:false};
+guardBattle.fighters.player.cooldown=99;
+guardBattle.fighters.bandit.cooldown=99;
+advanceFight(guardBattle,.05);
+assert.equal(guardBattle.fighters.player.hp,88,'guard should reduce a 20-point hit by 40%');
+guardBattle.fighters.bandit.x=650;
+advanceFight(guardBattle,2.1);
+assert.equal(guardBattle.fighters.player.guardRemaining,0,'guard should expire after two seconds');
+assert(guardBattle.maxStep<=.05,'large elapsed updates must be sliced into stable fixed steps');
+
+const speedBattle=Combat.createBattle({player:{x:300},bandit:{x:365}});
+advanceFight(speedBattle,3.3,()=>.99);
+assert(speedBattle.fighters.player.attacks>speedBattle.fighters.bandit.attacks,'the faster player should attack more often in the same window');
+
+const finishBattle=Combat.createBattle({player:{x:300},bandit:{x:365,hp:1}});
+finishBattle.fighters.player.action={kind:'windup',remaining:.01,resolved:false};
+advanceFight(finishBattle,.05);
+assert.equal(finishBattle.status,'player_win');
+const finishLogCount=finishBattle.log.length;
+advanceFight(finishBattle,1);
+assert.equal(finishBattle.log.length,finishLogCount,'a finished battle must not finalize twice');
+
+const escapeBattle=Combat.createBattle({bandit:{hp:20,x:600}});
+advanceFight(escapeBattle,.05,()=>0);
+advanceFight(escapeBattle,2,()=>0);
+assert.equal(escapeBattle.status,'bandit_fled');
+
 assert(fs.existsSync(path.join(__dirname,mapImage.src)),'village map asset is missing');
 assert(fs.existsSync(path.join(__dirname,spriteImage.src)),'villager sprite asset is missing');
 assert(fs.existsSync(path.join(__dirname,walkImage.src)),'walking sprite atlas is missing');
 assert(fs.existsSync(path.join(__dirname,walkExtraImage.src)),'supplemental walking sprite atlas is missing');
+assert.equal(banditImage.src,'assets/bandit.png');
+assert(fs.existsSync(path.join(__dirname,banditImage.src)),'bandit character asset is missing');
 for(const [index,image] of directionalImages.entries())assert(fs.existsSync(path.join(__dirname,image.src)),`directional sprite ${index} is missing`);
 for(const [id,image] of Object.entries(interiorImages))assert(fs.existsSync(path.join(__dirname,image.src)),id+' interior asset is missing');
 run('tick(100);tick(200)');
@@ -53,6 +154,30 @@ assert(drawCalls.some(args=>args[0]===directionalImages[0]&&args[2]===directiona
 assert(drawCalls.some(args=>args[0]===directionalImages[3]&&args[2]===directionalImages[3].naturalHeight/2),'NPC left-facing row was not drawn');
 assert.equal(run("directionFromDelta(0,-4,'down')"),'up');
 assert.equal(run("directionFromDelta(3,0,'down')"),'right');
+const banditPoses={};
+for(const kind of ['idle','approach','windup','hurt','down']){
+ const start=canvasOps.length;
+ run(`drawBandit(360,500,{action:{kind:'${kind}'},facing:'left'})`);
+ assert(drawCalls.some(args=>args[0]===banditImage),kind+' must draw the bandit image');
+ banditPoses[kind]=JSON.stringify(canvasOps.slice(start));
+}
+assert.equal(new Set(Object.values(banditPoses)).size,5,'bandit combat states need distinct poses');
+const banditDraw=drawCalls.filter(args=>args[0]===banditImage).at(-1);
+assert(banditDraw.at(-2)<=72&&banditDraw.at(-1)<=78,'bandit sprite should stay near the player character scale');
+
+run("battle=Combat.createBattle({player:{x:300},bandit:{x:365}});battle.fighters.bandit.action={kind:'windup',remaining:.12,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='arc'),'bandit slash should draw a curved blade trail');
+run("battle.fighters.player.action={kind:'parry',remaining:.3,resolved:false};battle.fighters.bandit.action={kind:'idle',remaining:0,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='fillText'&&op[1]==='挡'),'parry should show the 挡 action cue');
+assert(canvasOps.some(op=>op[0]==='lineTo'),'parry should draw a horizontal sword guard');
+run("battle.fighters.player.action={kind:'dodge',remaining:.3,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='fillText'&&op[1]==='闪'),'dodge should show the 闪 action cue');
+run("battle.fighters.player.action={kind:'idle',remaining:0,resolved:false};battle.fighters.bandit.action={kind:'flee',remaining:Infinity,resolved:false}");
+canvasOps.length=0;run('drawBattle()');
+assert(canvasOps.some(op=>op[0]==='fillText'&&op[1]==='逃'),'fleeing should show the 逃 action cue');
 assert.equal(DATA.gameMinutesPerRealSecond,1,'24 real minutes must equal one game day');
 run('state=Core.fresh();last=1000;tick(1441000)');
 check('state.time===Core.fresh().time+1440');
@@ -253,6 +378,29 @@ run('close()');
 
 resetClickScene();run('clickMap({x:326,y:918})');finishWalking();check("state.scene==='village'");
 run('clickMap({x:326,y:918})');check("state.scene==='road'");
+assert(DATA.map.bandit,'road bandit data is missing');
+check("interactionTargets().filter(t=>t.type==='bandit').length===1");
+run('clickMap(DATA.map.bandit)');check("travel?.target?.type==='bandit' && !modal");finishWalking();
+run('clickMap(DATA.map.bandit)');
+check("modal && dialogue && document.getElementById('dialogue-name').textContent==='山贼'");
+assert.deepEqual(elements['dialogue-actions'].children.map(button=>button.textContent),['拔剑迎战','暂且退开']);
+elements['dialogue-actions'].children[1].onclick();
+check("state.scene==='road' && !modal && dialogue===null");
+run("banditEncounter();toastUntil=9999;document.getElementById('walk-status').textContent='旧提示'");
+elements['dialogue-actions'].children[0].onclick();
+check("state.scene==='battle' && battle?.status==='running'");
+check("toastUntil===0 && document.getElementById('walk-status').textContent==='战斗自动进行中，双方会自行判断攻防。'");
+check("battle.fighters.player.hp===100 && battle.fighters.bandit.hp===120");
+assert.equal(elements['combat-hud'].hidden,false,'battle HUD should be visible');
+run('renderNearby()');
+assert.equal(elements['near-actions'].children.length,0,'ordinary nearby actions should be hidden in battle');
+run('last=1000;tick(1100)');check('battle.time>0 && battle.time<=.11');
+run('battleBeforeRestart=battle');elements['combat-restart'].onclick();
+check("battle!==battleBeforeRestart && battle.fighters.player.hp===100 && battle.fighters.bandit.hp===120");
+run('last=1000;tick(6000)');check('battle.time<=.11');
+elements['combat-return'].onclick();
+check("state.scene==='road' && battle===null && document.getElementById('combat-hud').hidden");
+check("document.getElementById('walk-status').textContent.includes('古道')");
 run('clickMap({x:360,y:890})');finishWalking();run('clickMap({x:360,y:890})');check("state.scene==='village'");
 
 for(const crop of ['青菜','玉米','花生','豌豆']){

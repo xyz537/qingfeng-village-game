@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qingfeng.invalid/schemas/review.schema.json",
+  "title": "Qingfeng pipeline review report",
+  "description": "Independent review verdict consumed by Codex strict Structured Outputs. Every object lists every one of its properties in required and sets additionalProperties=false, recursively: the API refuses the request before inference otherwise. Optional detail is never omitted; it uses the sentinel \"\" (no evidence/path) or 0 (no line). A pass requires every acceptance item passed, every independent command exit 0 at the exact headSha, and no critical or important finding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["headSha", "verdict", "acceptanceResults", "findings", "testEvidence"],
+  "properties": {
+    "headSha": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "Must equal the verified head under review." },
+    "verdict": { "enum": ["pass", "needs-fix", "blocked"] },
+    "acceptanceResults": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per acceptance item in the frozen manifest, in order; text must be copied verbatim.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "passed", "evidence"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "passed": { "type": "boolean" },
+          "evidence": { "type": "string", "description": "Concrete rerun/reference evidence; use \"\" only when there is genuinely nothing to cite." }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Empty when there is nothing to report.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "message", "path", "line"],
+        "properties": {
+          "severity": { "enum": ["critical", "important", "minor", "nit"] },
+          "message": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "description": "Repository-relative file path; use \"\" when the finding is not tied to one file." },
+          "line": { "type": "integer", "description": "1-based line number; use 0 when there is no exact line." }
+        }
+      }
+    },
+    "testEvidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Rerun outputs, each bound to the reviewed headSha and the frozen manifest digest; exit 0 alone is not a pass.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "exitCode", "headSha", "specDigest", "output", "startedAt", "endedAt"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "exitCode": { "type": "integer" },
+          "headSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "specDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 of the frozen task manifest this evidence is bound to." },
+          "output": { "type": "string", "description": "Full captured stdout+stderr of the rerun; use \"\" only when the command produced no output." },
+          "startedAt": { "type": "string", "minLength": 1 },
+          "endedAt": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
