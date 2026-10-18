@@ -7,7 +7,7 @@ const Combat=(()=>{
   return {...source,...overrides,allowed:{...source.allowed,...overrides.allowed},action:{kind:'idle',remaining:0,resolved:false},cooldown:0,guardRemaining:0,attacks:0,decision:'观察对手',decisionReason:'等待战机',escaping:false,fleeChecked:false};
  }
  function createBattle(overrides={}){
-  return {time:0,status:'running',fighters:{player:fighter(templates.player,overrides.player),bandit:fighter(templates.bandit,overrides.bandit)},log:[],result:null,maxStep:0};
+  return {time:0,status:'running',fighters:{player:fighter(templates.player,overrides.player),bandit:fighter(templates.bandit,overrides.bandit)},log:[],events:[],nextEventId:1,result:null,maxStep:0};
  }
  function previewDamage(attacker,defender){
   let damage=Math.max(1,attacker.attack-defender.defense*.5);
@@ -19,6 +19,15 @@ const Combat=(()=>{
   battle.log.push({time:battle.time,text,type});
   if(battle.log.length>12)battle.log.splice(0,battle.log.length-12);
  }
+ function addEvent(battle,type,data={}){
+  const event={id:battle.nextEventId++,time:battle.time,type,...data};
+  battle.events.push(event);
+  if(battle.events.length>32)battle.events.splice(0,battle.events.length-32);
+  return event;
+ }
+ function impactPoint(attacker,defender){
+  return {x:attacker.x+(defender.x-attacker.x)*.55,y:attacker.y+(defender.y-attacker.y)*.55};
+ }
  function setAction(fighter,kind,remaining,decision,reason){
   fighter.action={kind,remaining,resolved:false};
   fighter.decision=decision;
@@ -28,6 +37,7 @@ const Combat=(()=>{
   if(battle.status!=='running')return;
   battle.status=status;
   battle.result={status,time:battle.time,text,playerAttacks:battle.fighters.player.attacks,banditAttacks:battle.fighters.bandit.attacks};
+  addEvent(battle,'result',{result:status,text});
   addLog(battle,text,'result');
  }
  function opponentOf(battle,fighter){return fighter.id==='player'?battle.fighters.bandit:battle.fighters.player;}
@@ -37,6 +47,7 @@ const Combat=(()=>{
   fighter.y=Math.max(565,Math.min(735,fighter.y+direction*48));
   fighter.x+=fighter.x<opponent.x?-22:22;
   setAction(fighter,'dodge',.42,'闪避','对手正在蓄势，侧身拉开距离');
+  addEvent(battle,'dodge',{source:fighter.id,target:opponent.id,x:fighter.x,y:fighter.y});
   addLog(battle,`${fighter.name}侧身闪避。`,'defense');
  }
  function defend(fighter,opponent,battle){
@@ -45,16 +56,18 @@ const Combat=(()=>{
   if(fighter.aiLevel>=2&&fighter.allowed.guard&&fighter.guardRemaining<=0&&fighter.innerPower>=10&&(low||threatened>=fighter.hp*.25)){
    fighter.innerPower-=10;fighter.guardRemaining=2;
    setAction(fighter,'guard',.35,'内力护体','威胁较高且内力充足');
+   addEvent(battle,'guard',{source:fighter.id,target:opponent.id,x:fighter.x,y:fighter.y});
    addLog(battle,`${fighter.name}运起内力护体。`,'defense');return true;
   }
   if(low&&fighter.allowed.dodge){dodge(fighter,opponent,battle);return true;}
-  if(fighter.allowed.parry){setAction(fighter,'parry',.48,'招架','看见对手起手，稳住兵刃');addLog(battle,`${fighter.name}横兵招架。`,'defense');return true;}
+  if(fighter.allowed.parry){setAction(fighter,'parry',.48,'招架','看见对手起手，稳住兵刃');addEvent(battle,'parry',{phase:'stance',source:fighter.id,target:opponent.id});addLog(battle,`${fighter.name}横兵招架。`,'defense');return true;}
   if(fighter.allowed.dodge){dodge(fighter,opponent,battle);return true;}
   return false;
  }
  function beginAttack(fighter,battle){
   fighter.cooldown=fighter.attackInterval;fighter.attacks++;
   setAction(fighter,'windup',fighter.windup,fighter.technique,`目标进入${fighter.attackRange}步攻击范围`);
+  addEvent(battle,'attack',{source:fighter.id,target:opponentOf(battle,fighter).id,technique:fighter.technique});
   addLog(battle,`${fighter.name}准备使出${fighter.technique}。`,'attack');
  }
  function resolveAttack(battle,attacker){
@@ -62,13 +75,15 @@ const Combat=(()=>{
   if(battle.status!=='running'||attacker.action.resolved)return;
   attacker.action.resolved=true;
   if(defender.action.kind==='dodge'||distance(attacker,defender)>attacker.attackRange+12){
+   addEvent(battle,'miss',{source:attacker.id,target:defender.id,technique:attacker.technique});
    addLog(battle,`${attacker.name}的${attacker.technique}落空。`,'miss');return;
   }
   const parried=defender.action.kind==='parry',guarded=defender.guardRemaining>0,damage=previewDamage(attacker,defender);
   defender.hp=Math.max(0,defender.hp-damage);
   const note=parried?'，伤势被招架化去大半':guarded?'，护体卸去部分力道':'';
+  addEvent(battle,parried?'parry':'hit',{phase:'impact',source:attacker.id,target:defender.id,technique:attacker.technique,damage,parried,guarded,...impactPoint(attacker,defender)});
   addLog(battle,`${attacker.name}以${attacker.technique}命中${defender.name}，造成 ${damage} 点伤害${note}。`,'hit');
-  if(defender.hp<=0){setAction(defender,'down',Infinity,'倒地','气血归零');finish(battle,attacker.id==='player'?'player_win':'bandit_win',attacker.id==='player'?'山贼倒地，主角获胜。':'主角不支倒地。');}
+  if(defender.hp<=0){setAction(defender,'down',Infinity,'倒地','气血归零');addEvent(battle,'down',{source:attacker.id,target:defender.id});finish(battle,attacker.id==='player'?'player_win':'bandit_win',attacker.id==='player'?'山贼倒地，主角获胜。':'主角不支倒地。');}
   else if(!['parry','dodge','guard'].includes(defender.action.kind))setAction(defender,'hurt',.18,'受击',`承受 ${damage} 点伤害`);
  }
  function updateAction(battle,fighter,dt){
@@ -89,7 +104,7 @@ const Combat=(()=>{
   if(fighter.escaping){move(fighter,opponent,dt,true);setAction(fighter,'flee',Infinity,'逃跑','气血过低，只想保命');if(fighter.x<=40||fighter.x>=680)finish(battle,fighter.id==='bandit'?'bandit_fled':'player_fled',`${fighter.name}逃离了战场。`);return;}
   if(fighter.aiLevel===0&&fighter.hp/fighter.maxHp<.2&&!fighter.fleeChecked){
    fighter.fleeChecked=true;
-   if(random()<.35){fighter.escaping=true;setAction(fighter,'flee',Infinity,'逃跑','气血低于两成');addLog(battle,`${fighter.name}胆怯后退，想要逃跑。`,'flee');return;}
+   if(random()<.35){fighter.escaping=true;setAction(fighter,'flee',Infinity,'逃跑','气血低于两成');addEvent(battle,'flee',{source:fighter.id,target:opponent.id});addLog(battle,`${fighter.name}胆怯后退，想要逃跑。`,'flee');return;}
   }
   if(defend(fighter,opponent,battle))return;
   if(distance(fighter,opponent)>fighter.attackRange){setAction(fighter,'approach',Infinity,'接近','目标在攻击范围外');move(fighter,opponent,dt);return;}
