@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "workerId": "desktop-a",
+  "approvedUsers": ["xyz537"],
+  "repository": "xyz537/qingfeng-village-game",
+  "repositoryUrl": "https://github.com/xyz537/qingfeng-village-game.git",
+  "baseRef": "setup/codex-dsh-pipeline",
+  "workspaceRoot": "C:\\Users\\<you>\\AppData\\Local\\QingfengPipeline\\workspaces",
+  "logsDir": "C:\\Users\\<you>\\AppData\\Local\\QingfengPipeline\\logs",
+  "concurrentTasks": 1,
+  "maxFixRetries": 2,
+  "timeouts": {
+    "dshMs": 1800000,
+    "reviewMs": 1200000,
+    "testMs": 300000,
+    "commandMs": 300000,
+    "gitMs": 120000
+  },
+  "github": {
+    "credentialCommand": {
+      "command": "C:\\Users\\<you>\\AppData\\Local\\QingfengPipeline\\bin\\credential-helper.exe",
+      "args": ["read", "github-token"]
+    },
+    "refPrefix": "refs/heads/automation/claim",
+    "logRef": "refs/heads/automation/logs"
+  },
+  "dsh": {
+    "profile": "qingfeng-dsh",
+    "executable": "C:\\Users\\<you>\\AppData\\Local\\Programs\\DSH\\DSH.exe",
+    "cliEntry": "C:\\Users\\<you>\\AppData\\Local\\Programs\\DSH\\resources\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js",
+    "args": [],
+    "modelKeyEnvName": "DEEPSEEK_API_KEY",
+    "credentialCommand": {
+      "command": "C:\\Users\\<you>\\AppData\\Local\\QingfengPipeline\\bin\\credential-helper.exe",
+      "args": ["read", "dsh-model-key"]
+    }
+  },
+  "review": {
+    "profile": "qingfeng-review",
+    "executable": "C:\\Users\\<you>\\AppData\\Local\\Programs\\codex\\codex.exe",
+    "cliEntry": null,
+    "args": [],
+    "outputSchemaPath": "C:\\Users\\<you>\\AppData\\Local\\QingfengPipeline\\controller\\tools\\pipeline\\schemas\\review.schema.json",
+    "commands": [
+      { "command": "node", "args": ["--check", "game.js"] },
+      { "command": "node", "args": ["--check", "test.cjs"] },
+      { "command": "node", "args": ["test.cjs"] }
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qingfeng.invalid/schemas/task.schema.json",
+  "title": "Qingfeng pipeline task manifest",
+  "description": "Frozen approved task manifest embedded in an Issue body as a single ```json fenced block. Any edit invalidates the digest and stops the run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "repository",
+    "issueNumber",
+    "title",
+    "approvedBy",
+    "baseRef",
+    "baseSha",
+    "branch",
+    "allowedPaths",
+    "acceptance",
+    "verificationCommands",
+    "maxFixRetries"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1, "description": "Manifest schema version." },
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name; must equal the configured repository." },
+    "issueNumber": { "type": "integer", "minimum": 1, "description": "Must equal the Issue number that carries this block." },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "approvedBy": { "type": "string", "minLength": 1, "maxLength": 80, "description": "Must be in the local approvedUsers allowlist." },
+    "baseRef": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Shared branch is refused; must equal the configured baseRef." },
+    "baseSha": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "Full commit sha that must exist on baseRef." },
+    "branch": { "type": "string", "pattern": "^agent/issue-[0-9]+-[a-z0-9][a-z0-9-]*$", "description": "The only branch the pipeline may publish." },
+    "allowedPaths": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Repository-relative directory prefixes the diff may touch, each ending with /.",
+      "items": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*/$" }
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+    },
+    "verificationCommands": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Must match the local command allowlist exactly; shell, eval and escaping are refused.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "args"],
+        "properties": {
+          "command": { "type": "string", "description": "Preinstalled command name on this machine (for example node)." },
+          "args": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "maxFixRetries": { "const": 2, "description": "Fixed by policy: first attempt plus at most two fixes." }
+  }
+}

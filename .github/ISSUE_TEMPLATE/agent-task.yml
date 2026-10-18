@@ -1,0 +1,68 @@
+name: Agent task manifest
+description: 单次开发流水线任务（DSH 实现，Codex 独立验收）
+title: "[agent] "
+labels: ["ready-for-agent"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        填写任务清单后请保持 Issue 打开。控制器只执行本 Issue 正文中**唯一**一个 ```json 代码块里的清单；
+        任何后续编辑都会改变清单摘要，正在执行的流水线会立即停止并要求人工确认。
+        不要在 Issue 正文里写 shell 命令：控制器不会执行 Issue 里的命令文本。
+
+        流程：DSH 先实现并自测 → 控制器按精确 head 推送业务分支并创建一个 **Draft PR** →
+        Codex 只读独立验收该 PR 的精确 head。同一 PR 会贯穿最多两轮修复；验收失败时保持 Draft 打开并附带具体反馈，
+        验收通过时同样保持打开，不自动合并。是否合并由用户决定。
+  - type: textarea
+    id: intent
+    attributes:
+      label: 任务意图（人类可读）
+      description: 用一两句话说明要做什么、为什么。这里只是说明，不是自动化输入。
+      placeholder: 例如：为 NPC 日程补充可验证的行为测试与文档。
+    validations:
+      required: true
+  - type: textarea
+    id: manifest
+    attributes:
+      label: 任务清单（唯一 json 代码块）
+      description: |
+        必须是严格 schemaVersion=1 的清单，字段与 tools/pipeline/schemas/task.schema.json 一致。
+        maxFixRetries 固定为 2；branch 必须是 agent/issue-<本Issue编号>-<slug>；
+        allowedPaths 每个条目以 / 结尾；verificationCommands 只能使用本机预置允许的命令。
+      value: |
+        ```json
+        {
+          "schemaVersion": 1,
+          "repository": "xyz537/qingfeng-village-game",
+          "issueNumber": 0,
+          "title": "",
+          "approvedBy": "xyz537",
+          "baseRef": "setup/codex-dsh-pipeline",
+          "baseSha": "0000000000000000000000000000000000000000",
+          "branch": "agent/issue-0-slug",
+          "allowedPaths": ["tools/pipeline/"],
+          "acceptance": ["可验证的验收条件一"],
+          "verificationCommands": [
+            { "command": "node", "args": ["--check", "game.js"] },
+            { "command": "node", "args": ["--check", "test.cjs"] },
+            { "command": "node", "args": ["test.cjs"] }
+          ],
+          "maxFixRetries": 2
+        }
+        ```
+      render: json
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: 确认
+      options:
+        - label: 我已确认 issueNumber/baseRef/baseSha/branch 与本 Issue 及当前基础分支一致
+          required: true
+        - label: 我确认本任务不修改 game.js / test.cjs，除非它们出现在 allowedPaths 中
+          required: true
+        - label: 我确认会保持 Issue 与 PR 打开，等待人工决定合并
+          required: true
+        - label: 我确认交付使用一个 Draft PR，先于独立验收创建并在修复轮复用，不做强推
+          required: true
