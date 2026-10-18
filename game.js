@@ -6,6 +6,7 @@ if(state.scene==='battle'){state.scene='road';state.x=360;state.y=760;}
 if(state.scene==='village'&&Core.solid(state.x,state.y)){state.x=DATA.map.spawn.x;state.y=DATA.map.spawn.y;}
 let modal=false,dialogue=null,near=null,toastUntil=0,last=0,saveTimer=0,fish=null,seated=false,frame=0,playerWalkPhase=0,playerFacing='down';
 let battle=null;
+let seenEventId=0,battleEffects=[],battleVisualTime=0;
 let travel=null,pointerStart=null,nearSignature='';const navigationCache=new Map();
 const villagers=DATA.npcs.map((n,i)=>({...n,x:DATA.map.villageCenter.x+i*7,y:DATA.map.villageCenter.y+i*6,scene:'village',bubble:0,moving:false,movePhase:i,facing:'down'}));
 function save(){try{const saved=state.scene==='battle'?{...state,scene:'road',x:360,y:760}:state;localStorage.setItem('qingfeng-v1',JSON.stringify(saved));}catch{}}
@@ -84,10 +85,10 @@ function banditEncounter(){
  ],80);
 }
 function startBattle(){
- cancelTravel('战斗自动进行中，双方会自行判断攻防。');close();toastUntil=0;$('toast').style.opacity=0;state.scene='battle';state.x=190;state.y=650;battle=Combat.createBattle();near=null;nearSignature='';$('near-actions').replaceChildren();$('combat-hud').hidden=false;$('combat-result').hidden=true;renderCombatHud();
+ cancelTravel('战斗自动进行中，双方会自行判断攻防。');close();toastUntil=0;$('toast').style.opacity=0;state.scene='battle';state.x=190;state.y=650;battle=Combat.createBattle();resetBattleEffects();near=null;nearSignature='';$('near-actions').replaceChildren();$('combat-hud').hidden=false;$('combat-result').hidden=true;renderCombatHud();
 }
 function leaveBattle(){
- battle=null;state.scene='road';state.x=360;state.y=760;near=null;nearSignature='';$('combat-hud').hidden=true;$('combat-result').hidden=true;close();cancelTravel('已回到古道，可再次走近山贼挑战。');tell('你回到古道上，山贼仍在前方。');save();
+ battle=null;resetBattleEffects();state.scene='road';state.x=360;state.y=760;near=null;nearSignature='';$('combat-hud').hidden=true;$('combat-result').hidden=true;close();cancelTravel('已回到古道，可再次走近山贼挑战。');tell('你回到古道上，山贼仍在前方。');save();
 }
 function interact(target=near){
  if(modal||!target)return;
@@ -177,6 +178,42 @@ function drawInterior(){
  rect(0,0,720,960,'#334c40');rect(60,105,600,745,'#c9b78c');for(let i=0;i<18;i++)rect(60,110+i*40,600,2,'#b5a17b');rect(60,105,600,65,'#867858');rect(100,122,120,37,'#90aaa0');rect(500,122,120,37,'#90aaa0');text(b.name,360,78,27,'#e8dfbe');rect(155,270,410,77,'#89704c');rect(174,283,373,10,'#b09b70');text({smith:'铁砧 · 兵器架 · 炉火',elder:'账本 · 村志'}[state.scene],360,310,21,'#f4e4bd');for(let i=0;i<3;i++){rect(155+i*155,510,90,57,'#a08a63');rect(182+i*155,580,35,20,'#8c7757');}if(state.scene==='smith'){ellipse(578,396,27,28,'#a56840');ellipse(578,393,15,19,'#dfa663')}rect(321,825,78,29,'#344d3e');text('↓ 回到村中',360,890,18,'#e8dfbe');
 }
 function drawRoad(){rect(0,0,720,960,'#8fa77e');rect(298,0,125,960,'#caba91');for(let i=0;i<17;i++){tree(90+(i%2)*460,80+i*53,1.6);}text('村 外 古 道',360,160,30);text('前路有人持刀拦道',360,240,19);drawBandit(DATA.map.bandit.x,DATA.map.bandit.y);mapSign('山贼',DATA.map.bandit.x,DATA.map.bandit.y+33);text('↓ 返回清风村',360,897,19);}
+function resetBattleEffects(){seenEventId=0;battleEffects.length=0;battleVisualTime=0;}
+function consumeBattleEvents(){
+ if(!battle)return;
+ const history=battle.events||[];
+ for(const event of history){
+  if(event.id<=seenEventId)continue;
+  seenEventId=event.id;
+  if(event.type==='hit'||(event.type==='parry'&&event.phase==='impact'))battleEffects.push({eventId:event.id,kind:event.type,time:battleVisualTime,x:event.x??battle.fighters[event.target]?.x??360,y:event.y??battle.fighters[event.target]?.y??650,damage:event.damage});
+  else if(event.type==='guard')battleEffects.push({eventId:event.id,kind:'guard',time:battleVisualTime,x:event.x??battle.fighters[event.source]?.x??360,y:event.y??battle.fighters[event.source]?.y??650});
+  else if(event.type==='down')battleEffects.push({eventId:event.id,kind:'down',time:battleVisualTime,x:event.x??battle.fighters[event.target]?.x??360,y:event.y??battle.fighters[event.target]?.y??650});
+ }
+ if(battleEffects.length>32)battleEffects.splice(0,battleEffects.length-32);
+}
+function drawBattleEffect(effect){
+ const span=.6,age=Math.max(0,Math.min(span,battleVisualTime-effect.time)),t=age/span,alpha=1-t;if(alpha<=0)return;
+ ctx.save();ctx.globalAlpha=alpha;ctx.lineCap='round';
+ if(effect.kind==='hit'){
+  ctx.strokeStyle='#f6f1dc';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(effect.x-26,effect.y+15);ctx.lineTo(effect.x+22,effect.y-14);ctx.stroke();
+  ctx.strokeStyle='#ffe9a6';ctx.lineWidth=2;ctx.beginPath();ctx.arc(effect.x,effect.y,3+t*8,0,Math.PI*2);ctx.stroke();
+  if(effect.damage!=null&&effect.time>=0)text(`-${effect.damage}`,effect.x,effect.y-18-t*24,20,'#ffe9a6');
+ }else if(effect.kind==='parry'){
+  ctx.strokeStyle='#fff6cf';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(effect.x-19,effect.y-17);ctx.lineTo(effect.x+19,effect.y+17);ctx.moveTo(effect.x+19,effect.y-17);ctx.lineTo(effect.x-19,effect.y+17);ctx.stroke();
+  ctx.lineWidth=1.6;const spark=5+t*7;ctx.beginPath();ctx.arc(effect.x,effect.y,spark,0,Math.PI);ctx.stroke();ctx.beginPath();ctx.arc(effect.x,effect.y,spark,Math.PI,Math.PI*2);ctx.stroke();
+  text('铮',effect.x,effect.y-15-t*12,19,'#fff6cf');
+ }else if(effect.kind==='guard'){
+  ctx.strokeStyle='#7fd3db';ctx.lineWidth=3;
+  ctx.beginPath();ctx.ellipse(effect.x,effect.y-32,26+t*26,36+t*30,0,0,Math.PI*2);ctx.stroke();
+  ctx.strokeStyle='#b9f0f4';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(effect.x,effect.y-32,16+t*18,24+t*22,0,0,Math.PI*2);ctx.stroke();
+ }else if(effect.kind==='down'){
+  ctx.fillStyle='#cbbf9c';
+  for(const [dx,dy] of [[-13,2],[9,4],[-4,-2],[16,-1]]){ctx.beginPath();ctx.arc(effect.x+dx,effect.y+dy-t*6,2.5+t*3,0,Math.PI*2);ctx.fill();}
+ }
+ ctx.restore();
+}
+function drawBattleEffects(){if(!battle){battleEffects.length=0;return;}battleEffects=battleEffects.filter(effect=>battleVisualTime-effect.time<.6);for(const effect of battleEffects)drawBattleEffect(effect);}
 function drawBattle(){
  rect(0,0,720,960,'#65775c');rect(0,510,720,450,'#9b8d68');
  for(let i=0;i<12;i++){rect(i*72-20,520+(i%3)*105,90,5,'#83755455');}
@@ -190,6 +227,7 @@ function drawBattle(){
  if(playerKind==='dodge')actionCue('闪',player.x-43,player.y-58,'#b9eddd');
  drawBandit(banditFighter.x,banditFighter.y,{...banditFighter,facing:banditFighter.x>player.x?'left':'right',animationTime:battle.time});
  if(banditFighter.action.kind==='flee')actionCue('逃',banditFighter.x+43,banditFighter.y-58,'#ffd19b');
+ drawBattleEffects();
 }
 function actionLabel(fighter){return {idle:'观察',approach:'接近',windup:fighter.technique,parry:'招架',dodge:'闪避',guard:'内力护体',hurt:'受击',down:'倒地',flee:'逃跑'}[fighter.action.kind]||fighter.action.kind;}
 function renderCombatHud(){
@@ -414,7 +452,7 @@ function tick(now){
  }
  updateNPC(dt);
  if(state.scene==='battle'){
-  if(battle)Combat.step(battle,dt);drawBattle();near=null;$('near-actions').replaceChildren();renderCombatHud();
+  battleVisualTime+=dt;if(battle)Combat.step(battle,dt);consumeBattleEvents();drawBattle();near=null;$('near-actions').replaceChildren();renderCombatHud();
  }else{
   if(state.scene==='village')drawVillage();else if(state.scene==='road')drawRoad();else drawInterior();
   near=findNear();drawNavigation();
